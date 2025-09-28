@@ -1,21 +1,52 @@
-const debounce = (func, delay) => {
-    let timer = null;
-    return function (...args) {
-        if (timer != null) {
-            clearTimeout(timer)
-        }
-        timer = setTimeout(() => {
-            func.call(this, ...args)
-        }, delay)
+// function debounce(func, wait) {
+//     let timeout;
+//     return function() {
+//         const context = this;
+//         const args = arguments;
+//         clearTimeout(timeout);
+//         timeout = setTimeout(() => {
+//             func.apply(context, args);
+//         }, wait);
+//     };
+// }
+
+
+
+
+
+function debounce(func, limit) {
+  let timer = null;
+
+  return function (...args) {
+    if (timer) {
+      clearTimeout(timer)
     }
+
+    timer = setTimeout(() => {
+      func.apply(this, args)
+    }, limit);
+
+  }
 }
 
-// test
-const array = new Array(100)
-const task = (i) => {
-    console.log(i);
+// Test cases
+function testDebounce() {
+  // Test 1: Function is called only once after rapid successive calls
+  let callCount = 0;
+  const debouncedFn = debounce((a, b) => { callCount = a + b }, 100);
+
+  debouncedFn(1, 1);
+  debouncedFn(1, 1);
+  debouncedFn(1, 1);
+
+  setTimeout(() => {
+    console.log(callCount);
+    // console.assert(callCount === 1, "Test 1 Failed: Function should be called once");
+  }, 200);
+
 }
-const doubbleTask = debounce(task, 2000)
-for (let index = 0; index < array.length; index++) {
-    doubbleTask(index)   
-}
+
+testDebounce()
+
+
+

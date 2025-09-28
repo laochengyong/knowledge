@@ -1,0 +1,48 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>微应用1</title>
+    <style>
+        body {
+            background: #fff;
+            padding: 20px;
+        }
+    </style>
+    <!-- <script src="./app.js"></script> -->
+    <script>
+        // 微应用 app.js（在 mount 中定义 sendToMain）
+        window['micro-app1'] = {
+            mount: async (props) => {
+                const { actions } = props;
+
+                // 定义 sendToMain 函数
+                window.sendToMain = (data) => {
+                    if (actions) {
+                        actions.setGlobalState({ ...actions.getGlobalState(), ...data });
+                    }
+                };
+
+                // 现在可以安全使用了
+                sendToMain({ message: '测试消息' });
+            },
+            unmount: async () => {
+                // 卸载时清除全局函数，避免污染
+                delete window.sendToMain;
+            }
+        };
+
+    </script>
+
+</head>
+
+<body>
+    <h2>无Webpack微应用1-2</h2>
+    <p id="msg"></p>
+    <button onclick="sendToMain()">向主应用发送消息</button>
+
+</body>
+
+</html>
