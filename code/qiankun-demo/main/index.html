@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Qiankun 主应用</title>
+  <style>
+    body {
+      margin: 0;
+      padding: 20px;
+      font-family: sans-serif;
+    }
+
+    .nav {
+      margin-bottom: 20px;
+      padding: 10px;
+      background-color: #f5f5f5;
+    }
+
+    .nav a {
+      margin-right: 15px;
+      text-decoration: none;
+      color: #333;
+    }
+
+    .nav a:hover {
+      color: #1890ff;
+    }
+
+    #micro-app-container {
+      border: 1px solid #e8e8e8;
+      min-height: 400px;
+      padding: 20px;
+    }
+
+    .main-content {
+      margin-bottom: 20px;
+    }
+  </style>
+</head>
+
+<body>
+  <div class="main-content">
+    <h1>这是主应用</h1>
+    <p>主应用可以加载不同的微应用</p>
+  </div>
+
+  <div class="nav">
+    <a href="/">首页</a>
+    <a href="/react">加载微应用1</a>
+    <a href="/vue">加载微应用2</a>
+  </div>
+
+  <!-- 微应用挂载容器 -->
+  <div id="micro-app-container"></div>
+
+  <!-- 引入 qiankun -->
+  <script src="./node_modules/qiankun/dist/index.umd.js"></script>
+  <!-- 引入主应用逻辑 -->
+  <script src="./main.js"></script>
+</body>
+
+</html>

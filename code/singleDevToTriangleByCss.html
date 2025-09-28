@@ -1,0 +1,45 @@
+<html>
+<div style="width: 0; height: 0; 
+
+
+
+
+  border-top: none;  /* 上边框设置为无 */
+  border-left: 50px solid transparent; /* 左边框50px透明 */
+  border-right: 50px solid none; /* 右边框设置为无 */
+  border-bottom: 100px solid red;"> /* 下边框100px红色，形成直角三角形 */
+</div>
+
+<div style="width: 0; height: 0;
+  border-left: 50px solid transparent; /* 左右边框50px透明 */
+  border-right: 50px solid transparent;
+  border-bottom: 100px solid blue;"> /* 下边框100px蓝色，形成等腰三角形 */
+</div>
+
+<div style="width: 0; height: 0;
+  border-top: 100px solid green; /* 上边框100px绿色 */
+  border-right: 50px solid transparent; /* 左右边框50px透明 */
+  border-left: 50px solid transparent;"> /* 形成倒置的等腰三角形 */
+</div>
+
+<div style="width: 0; height: 0;
+  border-right: 100px solid orange; /* 右边框100px橙色 */
+  border-top: 50px solid transparent; /* 上下边框50px透明 */
+  border-bottom: 50px solid transparent;"> /* 形成向右的三角形 */
+</div>
+
+<div style="width: 0; height: 0;
+  border-left: 100px solid purple; /* 左边框100px紫色 */
+  border-top: 50px solid transparent; /* 上下边框50px透明 */
+  border-bottom: 50px solid transparent;"> /* 形成向左的三角形 */
+</div>
+
+<div style="width: 100px; height: 100px;
+  background: linear-gradient(to bottom right, #fff 0%, #fff 50%, cyan 50%, cyan 100%);"> /* 对角线渐变，形成三角形效果 */
+</div>
+
+
+<div style="clip-path: polygon(50% 0%, 0% 100%, 100% 100%); /* 使用多边形裁剪路径创建三角形 */
+  width: 100px; height: 100px; background: pink;"></div>
+
+</html>
