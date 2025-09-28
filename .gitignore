@@ -1,2 +1,4 @@
 *m3u8_cache*
 *.ts
+*.mp4
+node_modules
