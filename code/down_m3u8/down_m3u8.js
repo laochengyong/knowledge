@@ -15,7 +15,7 @@ const { performance } = require('perf_hooks');
 const CONFIG = {
     DEFAULT_THREADS: 5,
     DEFAULT_RETRIES: 30,
-    TIMEOUT: 30000, // 30秒超时
+    INITIAL_TIMEOUT: 0, // 初始超时设为0表示无限制
     STATE_SAVE_INTERVAL: 3000, // 3秒保存一次状态
     MIN_SEGMENT_SIZE: 1024, // 1KB，小于此值视为损坏文件
 };
@@ -29,7 +29,7 @@ const PathUtils = {
      */
     getTempDirFromUrl(m3u8Url) {
         const hash = crypto.createHash('md5').update(m3u8Url).digest('hex').substring(0, 10);
-        return path.join(process.cwd(), `m3u8_cache_${hash}`);
+        return path.join(process.cwd(), `m3u8_cache/${hash}`);
     },
 
     /**
@@ -195,7 +195,8 @@ const FileUtils = {
                             return {
                                 ...segment,
                                 downloaded: true,
-                                size: stats.size
+                                size: stats.size,
+                                downloadTime: segment.downloadTime || 0 // 保留下载时间（如果有）
                             };
                         }
                     } catch (e) {
@@ -218,9 +219,11 @@ class HttpUtils {
      * @param {string} urlStr - 请求URL
      * @param {Object} options - 请求选项
      * @param {number} retries - 重试次数
-     * @returns {Promise<{data: Buffer, statusCode: number}>} 响应数据和状态码
+     * @returns {Promise<{data: Buffer, statusCode: number, duration: number}>} 响应数据、状态码和请求时长
      */
     static async request(urlStr, options = {}, retries = 0) {
+        const startTime = performance.now();
+        
         return new Promise((resolve, reject) => {
             const parsedUrl = new URL(urlStr);
             const module = parsedUrl.protocol === 'https:' ? https : http;
@@ -231,7 +234,7 @@ class HttpUtils {
                 path: parsedUrl.pathname + parsedUrl.search,
                 method: options.method || 'GET',
                 headers: options.headers || {},
-                timeout: options.timeout || CONFIG.TIMEOUT,
+                timeout: options.timeout || CONFIG.INITIAL_TIMEOUT,
                 ...options
             };
             
@@ -252,9 +255,11 @@ class HttpUtils {
                 const data = [];
                 res.on('data', (chunk) => data.push(chunk));
                 res.on('end', () => {
+                    const duration = performance.now() - startTime;
                     resolve({
                         data: Buffer.concat(data),
-                        statusCode: res.statusCode
+                        statusCode: res.statusCode,
+                        duration
                     });
                 });
             });
@@ -277,7 +282,7 @@ class HttpUtils {
      * @param {string} urlStr - 文件URL
      * @param {string} filePath - 保存路径
      * @param {Object} options - 请求选项
-     * @returns {Promise<{size: number, statusCode: number}>} 文件大小和状态码
+     * @returns {Promise<{size: number, statusCode: number, duration: number}>} 文件大小、状态码和下载时长
      */
     static async downloadFile(urlStr, filePath, options = {}) {
         const dir = path.dirname(filePath);
@@ -287,14 +292,15 @@ class HttpUtils {
         const fileHandle = await fsPromises.open(tempFilePath, 'w');
         
         try {
-            const { data, statusCode } = await HttpUtils.request(urlStr, options);
+            const { data, statusCode, duration } = await HttpUtils.request(urlStr, options);
             await fileHandle.write(data);
             await fileHandle.close();
             await fsPromises.rename(tempFilePath, filePath);
             
             return {
                 size: data.length,
-                statusCode
+                statusCode,
+                duration
             };
         } catch (e) {
             await fileHandle.close().catch(() => {});
@@ -342,12 +348,15 @@ class M3U8Parser {
                     index: result.segments.length,
                     downloaded: false,
                     size: 0,
+                    downloadTime: 0, // 新增：记录下载时间（毫秒）
                     retries: 0,
                     error: null
                 };
             } else if (line.startsWith('#EXT-X-KEY:')) {
                 // 解析加密信息
-                result.key = M3U8Parser.parseKey(line, baseUrl);
+                result.key = M3U8Parser.parseKey(line.slice('#EXT-X-KEY:'.length), baseUrl);
+                console.log(result.key, 22222222);
+                
             } else if (!line.startsWith('#') && line && currentSegment) {
                 // 解析片段URL
                 currentSegment.url = PathUtils.getFullUrl(baseUrl, line);
@@ -373,6 +382,7 @@ class M3U8Parser {
                 obj[key] = value.replace(/"/g, '');
                 return obj;
             }, {});
+        console.log(keyParts, 3333333333);
         
         if (keyParts.METHOD === 'NONE') {
             return null;
@@ -410,21 +420,22 @@ class DecryptUtils {
 
 // 下载工作线程
 function workerThread() {
-    const { segment, tempDir, key, retries } = workerData;
+    const { segment, tempDir, key, timeout } = workerData;
     const segmentsDir = path.join(tempDir, 'segments');
     const segmentPath = path.join(segmentsDir, `${segment.index}.ts`);
     
     async function downloadAndDecrypt() {
         try {
-            // 下载片段
-            const { size } = await HttpUtils.downloadFile(
+            // 下载片段，使用当前超时设置
+            const { size, duration } = await HttpUtils.downloadFile(
                 segment.url,
                 segmentPath,
-                { timeout: CONFIG.TIMEOUT }
+                { timeout }
             );
             
             // 如果需要解密
             if (key && key.method === 'AES-128') {
+                console.log(11111111111111111)
                 // 读取下载的文件
                 const encryptedData = await fsPromises.readFile(segmentPath);
                 
@@ -442,7 +453,8 @@ function workerThread() {
             return {
                 success: true,
                 index: segment.index,
-                size
+                size,
+                duration // 返回下载时长，用于动态调整超时
             };
         } catch (e) {
             return {
@@ -481,6 +493,8 @@ class DownloadManager {
         this.workers = new Map();
         this.consoleInterval = null;
         this.downloadedBytesHistory = [];
+        this.segmentDownloadTimes = []; // 记录片段下载时间，用于动态调整超时
+        this.currentTimeout = options.timeout || CONFIG.INITIAL_TIMEOUT;
     }
 
     /**
@@ -526,7 +540,8 @@ class DownloadManager {
             totalSegments: segments.length,
             downloadedSegments: segments.filter(seg => seg.downloaded).length,
             failedSegments: 0,
-            startTime: this.startTime
+            startTime: this.startTime,
+            segmentDownloadTimes: [] // 保存片段下载时间，用于续传时恢复超时设置
         };
         
         // 保存初始状态
@@ -561,6 +576,11 @@ class DownloadManager {
         }
         
         this.state = loadedState;
+        
+        // 恢复片段下载时间记录
+        this.segmentDownloadTimes = this.state.segmentDownloadTimes || [];
+        // 恢复超时设置
+        this.updateTimeout();
         
         // 验证M3U8文件
         console.log(`正在验证M3U8文件: ${this.state.m3u8Url}`);
@@ -644,7 +664,7 @@ class DownloadManager {
      */
     getOutputPath() {
         if (this.options.output) {
-            const outputPath = path.resolve(this.options.output);
+            const outputPath = path.resolve(this.options.output || this.tempDir);
             const outputDir = PathUtils.getOutputFolder(this.options);
             
             // 检查是否为目录
@@ -669,10 +689,33 @@ class DownloadManager {
     }
 
     /**
+     * 更新超时设置
+     * 超时时间 = 最慢下载片段时间 * 1.5
+     * 如果没有下载记录，使用初始值
+     */
+    updateTimeout() {
+        if (this.segmentDownloadTimes.length === 0) {
+            this.currentTimeout = this.options.timeout || CONFIG.INITIAL_TIMEOUT;
+            return;
+        }
+        
+        // 找到最慢的下载时间
+        const slowestTime = Math.min(...this.segmentDownloadTimes);
+        // 设置超时为最慢时间的1.5倍
+        this.currentTimeout = Math.ceil(slowestTime * Math.max(...this.state.segments.map(i => i.retries)));
+        
+        // 更新状态中的下载时间记录
+        if (this.state) {
+            this.state.segmentDownloadTimes = this.segmentDownloadTimes;
+        }
+    }
+
+    /**
      * 开始下载
      */
     async startDownload() {
         console.log(`开始下载，共 ${this.state.totalSegments} 个片段，使用 ${this.options.threads} 个线程`);
+        console.log(`当前超时设置: ${this.currentTimeout > 0 ? `${this.currentTimeout}ms` : '无限制'}`);
         
         // 获取未下载的片段
         const segmentsToDownload = this.state.segments
@@ -723,7 +766,7 @@ class DownloadManager {
                     data: this.key.data,
                     iv: this.key.iv
                 } : null,
-                retries: this.options.retries
+                timeout: this.currentTimeout
             }
         });
         
@@ -735,9 +778,14 @@ class DownloadManager {
                 // 更新片段状态
                 this.state.segments[result.index].downloaded = true;
                 this.state.segments[result.index].size = result.size;
+                this.state.segments[result.index].downloadTime = result.duration; // 记录下载时间
                 this.state.segments[result.index].error = null;
                 this.state.downloadedSegments++;
                 this.state.downloadedSize += result.size;
+                
+                // 记录下载时间，用于调整超时
+                this.segmentDownloadTimes.push(result.duration);
+                this.updateTimeout();
                 
                 // 记录下载字节数用于计算速度
                 this.downloadedBytesHistory.push({
@@ -880,7 +928,7 @@ class DownloadManager {
         await fsPromises.rename(tempOutputPath, outputPath);
         
         // 清理临时文件
-        await this.cleanup();
+        // await this.cleanup();
         
         // 输出统计信息
         this.updateConsole(true);
@@ -962,10 +1010,17 @@ class DownloadManager {
         // 计算平均速度
         const avgSpeed = elapsedTime > 0 ? (this.state.downloadedSize / (elapsedTime / 1000)) : 0;
         
+        // 计算预计总大小（已下载片段平均大小 * 总片段数）
+        let estimatedTotalSize = 0;
+        if (this.state.downloadedSegments > 0) {
+            const avgSegmentSize = this.state.downloadedSize / this.state.downloadedSegments;
+            estimatedTotalSize = avgSegmentSize * this.state.totalSegments;
+        }
+        
         // 计算预计剩余时间
         const remainingSegments = this.state.totalSegments - this.state.downloadedSegments;
         const estimatedRemainingTime = remainingSegments > 0 && speed > 0
-            ? (remainingSegments * (this.state.downloadedSize / this.state.downloadedSegments)) / speed * 1000
+            ? (remainingSegments * (this.state.downloadedSize / Math.max(1, this.state.downloadedSegments))) / speed * 1000
             : 0;
         
         // 构建进度条
@@ -977,11 +1032,12 @@ class DownloadManager {
             progressBar,
             `${percent}%`,
             `已下载: ${this.state.downloadedSegments}/${this.state.totalSegments}`,
-            `大小: ${FormatUtils.formatSize(this.state.downloadedSize)}`,
+            `大小: ${FormatUtils.formatSize(this.state.downloadedSize)}/${FormatUtils.formatSize(estimatedTotalSize)}`,
             `速度: ${FormatUtils.formatSize(speed)}/s`,
             `平均: ${FormatUtils.formatSize(avgSpeed)}/s`,
             `用时: ${FormatUtils.formatTime(elapsedTime)}`,
-            estimatedRemainingTime > 0 ? `剩余: ${FormatUtils.formatTime(estimatedRemainingTime)}` : ''
+            estimatedRemainingTime > 0 ? `剩余: ${FormatUtils.formatTime(estimatedRemainingTime)}` : '',
+            `超时: ${this.currentTimeout > 0 ? `${Math.round(this.currentTimeout/1000)}s` : '无限制'}`
         ].filter(Boolean).join(' | ');
         
         // 更新控制台
@@ -1004,6 +1060,7 @@ function parseArgs() {
         outputFolder: null,
         threads: CONFIG.DEFAULT_THREADS,
         retries: CONFIG.DEFAULT_RETRIES,
+        timeout: null,
         resume: null,
         forceMerge: false
     };
@@ -1020,6 +1077,8 @@ function parseArgs() {
             options.threads = parseInt(args[++i], 10) || CONFIG.DEFAULT_THREADS;
         } else if (arg === '-r' || arg === '--retries') {
             options.retries = parseInt(args[++i], 10) || CONFIG.DEFAULT_RETRIES;
+        } else if (arg === '--timeout') {
+            options.timeout = parseInt(args[++i], 10);
         } else if (arg === '--resume') {
             options.resume = args[++i];
         } else if (arg === '--force-merge') {
@@ -1042,8 +1101,8 @@ function parseArgs() {
         process.exit(1);
     }
     
-    // 确保线程数合理
-    options.threads = Math.max(1, Math.min(100, options.threads));
+    // 确保线程数合理（至少1，无上限）
+    options.threads = Math.max(1, options.threads);
     
     return options;
 }
@@ -1061,8 +1120,9 @@ function printUsage() {
     console.log('选项:');
     console.log('  -o, --output       指定输出文件路径或目录');
     console.log('  --output-folder    指定输出文件夹');
-    console.log('  -t, --threads      下载线程数，默认5');
+    console.log('  -t, --threads      下载线程数，默认5，无上限');
     console.log('  -r, --retries      最大重试次数，默认30');
+    console.log('  --timeout          超时时间(毫秒)，默认动态调整');
     console.log('  --resume           续传模式，指定临时目录');
     console.log('  --force-merge      强制重新合并所有片段');
     console.log('');
@@ -1084,7 +1144,10 @@ async function main() {
         
         // 注册异常处理
         process.on('SIGINT', async () => {
+
             console.log('\n收到中断信号，正在保存状态...');
+            console.log('部分片段已下载，准备合并...');
+            await downloadManager.finalizeDownload();
             if (downloadManager.state) {
                 await FileUtils.saveState(downloadManager.tempDir, downloadManager.state);
             }
@@ -1123,3 +1186,4 @@ async function main() {
 
 // 启动程序
 main();
+    
