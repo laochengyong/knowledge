@@ -1,5 +1,5 @@
 // 立即执行函数隔离作用域
-(function() {
+(function () {
     // 从全局获取qiankun API
     const { registerMicroApps, start, initGlobalState } = window.qiankun;
 
@@ -36,7 +36,8 @@
     // 启动qiankun
     start({
         sandbox: {
-            strictStyleIsolation: true
+            strictStyleIsolation: false,
+            experimentalStyleIsolation: true
         }
     });
 
@@ -44,7 +45,7 @@
     function handleRouter() {
         const path = window.location.pathname;
         if (path === '/') {
-            document.getElementById('micro-app-container').innerHTML = 
+            document.getElementById('micro-app-container').innerHTML =
                 '<p>请点击上方链接访问微应用</p>';
         }
     }
@@ -52,4 +53,3 @@
     window.addEventListener('popstate', handleRouter);
     handleRouter();
 })();
-    
