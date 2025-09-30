@@ -1,0 +1,65 @@
+<!-- <!DOCTYPE html>
+<html lang="en">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+  <style>
+    .data {
+      color: chocolate;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="app1"></div>
+  <div id="app2">
+    <div>填充数据2</div>
+  </div>
+</body>
+<script>
+  const shadow1 = document.querySelector('#app1').attachShadow({ mode: "open" })
+
+  const shadow2 = document.querySelector('#app2').attachShadow({ mode: "closed" })
+
+  shadow1.innerHTML = `<div class="data">填充数据1</div>`
+  shadow2.innerHTML = `<div class="data">填充数据3</div>`
+
+  // document.querySelector('#app2').innerHTML = `<div>填充数据4</div>`
+
+  // shadow2.mode = 'closed'
+</script>
+
+</html> -->
+<!-- <style>
+  div,
+  p {
+    color: red
+  }
+</style> -->
+<div>out</div>
+<div id="openShadowHost"></div>
+<div id="closedShadowHost"></div>
+
+<script>
+  const openHost = document.querySelector('#openShadowHost');
+  const closedHost = document.querySelector('#closedShadowHost');
+
+  // 创建 open 模式影子 DOM
+  openHost.attachShadow({ mode: 'open' });
+  // 创建 closed 模式影子 DOM
+  const shadowClosed = closedHost.attachShadow({ mode: 'closed' });
+
+  // 修改 open 模式内容（成功）
+  openHost.shadowRoot.innerHTML = '<p>Open Shadow Content</p>';
+
+  // 尝试修改 closed 模式内容（失败）
+  // try {
+  shadowClosed.innerHTML = '<style>div,p{color: red}</style><p>Closed Shadow Content</p>';
+  // } catch (e) {
+  //   console.log('Cannot access closed shadow DOM');
+  // }
+
+  // shadowClosed.innerHTML = '<p>Closed Shadow Content2</p>'
+</script>

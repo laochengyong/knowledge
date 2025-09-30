@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -9,14 +10,17 @@
             padding: 20px;
             background: #f5f5f5;
         }
+
         .nav a {
             margin-right: 20px;
             text-decoration: none;
             color: #333;
         }
+
         .container {
             padding: 20px;
         }
+
         #micro-app-container {
             margin-top: 20px;
             padding: 20px;
@@ -24,6 +28,7 @@
         }
     </style>
 </head>
+
 <body>
     <div class="nav">
         <a href="/">主应用首页</a>
@@ -36,8 +41,9 @@
     </div>
 
     <!-- 引入qiankun -->
-    <script src="https://unpkg.com/qiankun@2.10.13/dist/index.umd.min.js"></script>
+    <!-- 2.10.13不支持scope css巨坑 -->
+    <script src="https://unpkg.com/qiankun@2.10.16/dist/index.umd.min.js"></script>
     <script src="./main.js"></script>
 </body>
+
 </html>
-    
