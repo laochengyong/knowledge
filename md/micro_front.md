@@ -60,7 +60,8 @@
             3. document返回Sandbox对象维护的document
             4. 白名单、不可修改的属性，返回window的属性
             5. 如果属性在fakeWindow存在，则返回fakeWindow内的属性
-            6. 如果是方法：还要通过bind将this重新window。
+            6. 如果属性在fakeWindow不存在，则返回window下的属性
+            7. 如果是方法：还要通过bind将this重新window。
           3. has()
           4. defindProperty()
           5. deleteProperty()
@@ -72,55 +73,197 @@
       3. motued时，激活sandbox；unmoted时，失活sandbox，清除副作用，打印存在的全局变量updateValueSet
   3. css隔离
     1. Shadow Dom(强隔离)
-      3个技术要点：
-        1. 
-        2. 给容器元素创建Shadow Dom节点
-        3. 把子应用Dom添加到Shadow Dom节点
-      3个优点：
+      2个技术要点：
+        1. 给容器元素创建Shadow Dom节点
+        2. 把子应用Dom与css添加到Shadow Dom节点
+      2个优点：
         1. 性能好：浏览器原生支持
-        2. 隔离
-        3.
-      3个缺点：
-        1. 兼容性问题：
-        2. 覆盖样式问题：主应用难于覆盖子应用样式，只能通过:root/--var来控制子应用样式；
-        3. Shadow Dom间交互问题：
-        4. 
+        2. 隔离性强
+      4个缺点：
+        1. 兼容性问题：老旧浏览器不支持Shadow Dom
+        2. 样式覆盖：主应用难于覆盖子应用样式，只能通过特定属性:root/css变量--var来控制子应用样式；
+        3. 事件处理：Shadow Boundary（影子边界）隔离了主应用与子应用DOM结构，冒泡事件、事件dispatch都会失效，需要额外写转发逻辑。
+        4. document.body问题:某些第3方的弹框/下拉菜单添加到document.body下，而不是shadowRoot下，导致样式丢失
     2. Scope 局部作用域(实验性隔离)
       3个技术要点：
-        1. 通过import-html-entry获取子应用的css样式
-        2. 给css样式选择器前添加属性选择器data-id="xxx"
-        3. 给子应用根节点添加属性data-id="xxx"
+        1. 拦截：通过import-html-entry获取子应用的css样式
+        2. 改写：给css样式选择器前添加属性选择器div[data-qiankun="subAppName"]
+        3. 标记：给子应用根节点添加属性data-qiankun="subAppName"
       3个优点：
-        1.
-        2.
-        3.
+        1. 兼容性好，兼容所有浏览器
+        2. 主应用能更好地覆盖子应用样式
+        3. 挂载的document.body问题少，因为body、html的样式不会被修改
       3个缺点：
-        1. 性能问题：
-        2. 复杂样式计算问题：
-        3. 隔离性差：body、html
-        4. 注意: @keyframes, @font-face, @import, @page 将不被支持 (i.e. 不会被改写)
+        1. 运行时计算问题：子应用渲染时，带来额外改写消耗
+        2. 隔离性差：body、html、@开头选择器不支持隔离：注意: @keyframes, @font-face, @import, @page 将不被支持 (i.e. 不会被改写)
+        3. 可能由于选择器优先级问题/body样式，导致不可控的样式冲突问题--样式规范
   4. 通讯
-    1. 
+    1. 通过props传递
+      用法关键点：
+        主应用提供：通过registryMicroApp注册子应用时，添加props属性。
+        子应用接收：通过mounted、unmounted、update生命周期钩子的第一个参数接收。
+      优点：简单
+      缺点：只在挂载卸载时能接收新props，子应用独立运行时无法实时监听props
+      场景：适合通讯简单，只需要子应用挂载卸载时通讯的场景中。
+    2. 通过全局状态initGlobalState(state)管理
+      用法关键点：
+        qiankun提供的获取全局状态通讯方法的api，建议在主应用使用，子应用通过props获取
+          返回3个通讯方法：
+            1. 监听全局状态：onGlobalStateChange: (callback, isImmdiate) => void
+            2. 更新全局状态：setGlobalSate: (state) => void
+            3. 清除该应用全局监听：offGlobalStateChange() => boolean
+      优点：实时监听到数据更新、全局通讯
+      缺点：用法稍复杂
+      场景：适合需要实时通讯场景
+    3. 其他（非乾坤支持的）
+      1. EventBus 
+        1. 自定义EventBus/引入mitt/rxjs库。
+        2. 主应用创建唯一的EventBus实例，并挂载到window
+        3. 所有应用都可以通过利用EventBus实例通讯
+      优点：双向通讯、实时通讯、解耦强
+      缺点：引入额外的库、卸载时注意清除
+      场景：
+      2. window
+      用法关键点：
+        1. 约定一个命名空间，如microAppData；
+        2. 主应用设置，子应用读取/获取调用microAppData方法传递数据给父组件。
+      优点：简单
+      缺点：无法实时监听；破坏隔离性
+      3. localStorage/sessionStorage/cookie等浏览器缓存
+      用法关键点：
+        1. 任意一个应用调用相关api写入；其他应用读取
+        2. localstorage/seesionStorage需要所有应用是同源应用；可以通过加统一代理实现
+        3. cookie的domain配置需要覆盖通讯的应用的访问host；
+      优点：持久化
+      缺点：无法实现监听，只能主动获取；有容量限制localstorage/seesionStorage是5M、cookie是4k；性能差；不支持复杂数据
   5. 生命周期
     1. bootstrap
-      启动
-    2. mouted
-      挂载
-    3. unmouted
+      时机：子应用首次加载时执行，只执行一次。
+      事情：适合做全局初始化操作，比如初始化配置、不会被unmounted清理的全局变量
+    2. mounted
+      时机：每次路由匹配到时
+      事情：DOM渲染、实例创建、定时器初始化
+    3. unmoumted
+      时机：每次路由切走/卸载时
+      事情：DOM卸载、定时器销毁、资源回收
+    4. update(可选)
+      时机：仅使用 loadMicroApp 方式加载微应用时生效
+      事情：监控被loadMicroApp渲染的次数等
 
 ## 怎么用
   qiankun
-  1. 安装 
-  2. 主应用
-  3. 子应用接入(接入流程：整个应用作为子应用接入->规划拆分子应用->开发新子应用->接入新子应用(替换原应用的某个部分))
+  1. 主应用
+    1. 安装qiankun： npm i qiankun -D / <script src="https://unpkg.com/qiankun@2.10.16/dist/index.umd.min.js"></script>
+    2. 提供子应用节点：编写主应用布局，提供子应用节点
+    3. 注册子应用：通过registryMicroApp({
+      name: "子应用名",
+      entry: '//hostsname:xxx', // 子应用html入口
+      container: '子应用在主应用挂载的节点',
+      activeRoot: '激活路径'
+    })
+    4. 启动，通过start(config: Object)启动，传入配置
+  2. 子应用接入(接入流程：整个应用作为子应用接入->规划拆分子应用->开发新子应用->接入新子应用(替换原应用的某个部分))
+    1. 在入口文件编写生命周期钩子：(给主应用控制)
+    ```javascript
+      // 暴露生命周期钩子给qiankun
+      if (window.__POWERED_BY_QIANKUN__) {
+        window['react-app'] = {
+          bootstrap: async () => console.log('React子应用 bootstrap'),
+          mount: async (props) => {
+            console.log('React子应用 mount', props);
+            renderApp(props);
+          },
+          unmount: async () => {
+            console.log('React子应用 unmount');
+            const root = ReactDOM.createRoot(document.getElementById('root'));
+            root.unmount();
+          }
+        };
+      } else {
+        // 独立运行
+        renderApp({});
+      }
+      ```
+    2. 改写打包配置：(给主应用识别)
+    ```javascript
+      webpack v5：
+      const packageName = require('./package.json').name;
 
+      module.exports = {
+        output: {
+          library: `${packageName}-[name]`,
+          libraryTarget: 'umd',
+          chunkLoadingGlobal: `webpackJsonp_${packageName}`,
+        },
+      };
+
+      // webpack v4
+      const packageName = require('./package.json').name;
+
+      module.exports = {
+        output: {
+          library: `${packageName}-[name]`,
+          libraryTarget: 'umd',
+          jsonpFunction: `webpackJsonp_${packageName}`,
+        },
+      };
+    ```
 ## 生态
 
 ## 竞品
   1. iframe
-  2. signle-spa
-  3. qiankun
-  4. micro
+    1. 使用
+      iframe标签引入子应用
+    2. 原理
+      通过iframe嵌套网页的功能
+    3. 优点
+      1. 使用简单
+      2. 隔离性好
+      3. 兼容性好
+    4. 劣点
+      总：如果不考虑体验问题，iframe几乎是最完美的微前端方案。
+      1. DOM隔离性太强，子应用的组件无法逃离子应用边界，一些全局弹出难以实现。
+      2. 性能问题：iframe开独立进程，占内存，加载慢。
+      3. iframe的history无法记录，前进后退无法使用。
+      4. postMessage通讯，只能传递序列化的字符串，无法传递复杂数据。
+    5. 场景
+      1. 不考虑性能的简单场景
+      2. 不可控的第三方
+  2. single-spa
+    1. 使用
+      主应用安装single-spa，注册子应用；子应用提供生命周期，更改产物输出配置。
+    2. 原理
+      监听路由，使用import-html-entry主动加载子应用资源，并挂载到预设容器标签中。
+    3. 优点
+      1. 使用简单
+      2. spa应用，体验好
+      3. 兼容性好
+    4. 劣点
+      1. 无隔离
+      2. 提供的api少
+    5. 场景
+      1. 不考虑隔离的简单场景
+  3. qiankun(蚂蚁)
+        1. 实现
+      iframe标签引入子应用
+    2. 原理
+      通过iframe嵌套网页的功能
+    3. 优点
+      1. 使用简单
+      2. 隔离性好
+      3. 兼容性好
+    4. 劣点
+      总：如果不考虑体验问题，iframe几乎是最完美的微前端方案。
+      1. DOM隔离性太强，子应用的组件无法逃离子应用边界，一些全局弹出难以实现。
+      2. 性能问题：iframe开独立进程，占内存，加载慢。
+      3. iframe的history无法记录，前进后退无法使用。
+      4. postMessage通讯，只能传递序列化的字符串，无法传递复杂数据。
+    5. 场景
+      1. 不考虑性能的简单场景
+      2. 不可控的第三方
+  4. micro-app(京东)
+  5. garfish(字节)
+  6. module Federation(webpack)
 
 ## 参考文献
 1. [qiankun官网](https://qiankun.umijs.org/zh/guide)
